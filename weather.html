@@ -180,7 +180,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     const API_KEY = '88dce30fd75d9ab6be2f1c55269818f2';
-    const USER_EMAIL = 'mr.mohammad.arjmand.dev@gmail.com';
 
     const cityInput = document.getElementById('cityInput');
     const searchBtn = document.getElementById('searchBtn');
@@ -261,11 +260,9 @@
         forecastCard.style.display = 'none';
 
         try {
-            // دریافت مختصات
+            // دریافت مختصات با Nominatim (بدون هدر اضافه)
             const nominatimURL = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
-            const geoRes = await fetch(nominatimURL, {
-                headers: { 'User-Agent': `WeatherApp/1.0 (${USER_EMAIL})` }
-            });
+            const geoRes = await fetch(nominatimURL);
             const geoData = await geoRes.json();
             if (!geoData.length) throw new Error('شهر پیدا نشد. لطفاً نام را بررسی کنید.');
 
