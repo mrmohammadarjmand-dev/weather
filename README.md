@@ -1,4 +1,4 @@
-# 🌤️ Weather App | اپلیکیشن آب‌وهوا
+# 🌤️ Weather App | وب اپلیکیشن آب‌وهوا
 
 A stylish weather web app with interactive map layers, 24-hour forecast chart, and Persian city name support.  
 یک وب‌اپلیکیشن زیبا و کاربردی برای نمایش آب‌وهوا، مجهز به نقشه با لایه‌های دما و بارش، نمودار ۲۴ ساعته و پشتیبانی از جستجوی شهرهای فارسی.
