@@ -260,18 +260,54 @@
         forecastCard.style.display = 'none';
 
         try {
-            // دریافت مختصات با Nominatim (بدون هدر اضافه)
-            const nominatimURL = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
-            const geoRes = await fetch(nominatimURL);
-            const geoData = await geoRes.json();
-            if (!geoData.length) throw new Error('شهر پیدا نشد. لطفاً نام را بررسی کنید.');
+            // روش اول: جستجوی مختصات با Nominatim (برای اسم‌های فارسی)
+            let lat, lon, cityName;
+            try {
+                const nominatimURL = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
+                const geoRes = await fetch(nominatimURL);
+                if (!geoRes.ok) throw new Error('عدم دسترسی به سرویس موقعیت‌یابی');
+                const geoData = await geoRes.json();
+                if (!geoData.length) throw new Error('شهر پیدا نشد');
+                lat = parseFloat(geoData[0].lat);
+                lon = parseFloat(geoData[0].lon);
+                cityName = geoData[0].display_name.split(',')[0] || city;
+            } catch (geoError) {
+                console.warn('Nominatim failed, trying direct OpenWeatherMap geocoding:', geoError);
+                // اگر Nominatim در دسترس نبود یا خطا داد، مستقیماً اسم شهر رو به OpenWeatherMap میدیم
+                const directRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric&lang=fa`);
+                const directData = await directRes.json();
+                if (directData.cod !== 200) throw new Error(directData.message || 'شهر پیدا نشد');
+                lat = directData.coord.lat;
+                lon = directData.coord.lon;
+                cityName = directData.name || city;
+                // دما و سایر اطلاعات رو مستقیماً از همین پاسخ می‌گیریم
+                document.getElementById('temperature').textContent = Math.round(directData.main.temp) + '°C';
+                document.getElementById('weatherDesc').textContent = directData.weather[0].description;
+                document.getElementById('humidity').textContent = directData.main.humidity;
+                document.getElementById('wind').textContent = Math.round(directData.wind.speed * 3.6);
+                document.getElementById('feelsLike').textContent = Math.round(directData.main.feels_like) + '°C';
+                document.getElementById('cityName').textContent = cityName;
+                weatherCard.style.display = 'block';
+                initMap(lat, lon, cityName);
+                // پیش‌بینی
+                const forecastRes = await fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=fa&appid=${API_KEY}`);
+                const forecastData = await forecastRes.json();
+                if (forecastData.cod === '200') {
+                    const next24h = forecastData.list.slice(0, 8);
+                    const labels = next24h.map(item => {
+                        const d = new Date(item.dt * 1000);
+                        return d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+                    });
+                    const temps = next24h.map(item => Math.round(item.main.temp));
+                    forecastCard.style.display = 'block';
+                    renderChart(labels, temps);
+                }
+                saveToHistory(city);
+                statusMsg.textContent = '';
+                return;
+            }
 
-            const lat = parseFloat(geoData[0].lat);
-            const lon = parseFloat(geoData[0].lon);
-            const cityName = geoData[0].display_name.split(',')[0] || city;
-            document.getElementById('cityName').textContent = cityName;
-
-            // آب‌وهوای فعلی
+            // اگر Nominatim جواب داد، ادامه‌ی کار با OpenWeatherMap
             const weatherRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&lang=fa&appid=${API_KEY}`);
             const weatherData = await weatherRes.json();
             if (weatherData.cod !== 200) throw new Error(weatherData.message || 'خطا در دریافت آب‌وهوا');
@@ -282,6 +318,7 @@
             document.getElementById('humidity').textContent = weatherData.main.humidity;
             document.getElementById('wind').textContent = Math.round(weatherData.wind.speed * 3.6);
             document.getElementById('feelsLike').textContent = Math.round(weatherData.main.feels_like) + '°C';
+            document.getElementById('cityName').textContent = cityName;
 
             weatherCard.style.display = 'block';
             initMap(lat, lon, cityName);
