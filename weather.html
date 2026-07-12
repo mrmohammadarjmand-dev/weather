@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <!-- فونت وزیر از Google Fonts (پایدار و بدون مشکل فارسی) -->
+    <!-- فونت وزیر از Google Fonts (پایدار) -->
     <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -54,7 +54,7 @@
             flex: 1;
             min-width: 220px;
         }
-        input, button, select {
+        input, button {
             padding: 0.4rem 0.7rem;
             border-radius: 0.5rem;
             border: 1px solid var(--border);
@@ -68,7 +68,7 @@
             flex: 1;
             min-width: 120px;
         }
-        button, select {
+        button {
             cursor: pointer;
             background: var(--primary);
             color: white;
@@ -102,6 +102,8 @@
             border-radius: 0.4rem;
             cursor: pointer;
             flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
         }
         .history-bar span:not(:last-child) {
             margin-inline-end: 0.4rem;
@@ -131,17 +133,10 @@
             font-size: 0.95rem;
         }
         #map {
-            height: 400px; /* نقشه بزرگ‌تر شد */
+            height: 500px; /* نقشه بزرگ‌تر */
             border-radius: 0.8rem;
             margin-top: 1rem;
             z-index: 0;
-        }
-        .layer-control {
-            margin: 0.5rem 0 0 0;
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            font-size: 0.85rem;
         }
         canvas { width: 100% !important; max-height: 250px; }
         .loading-text {
@@ -153,7 +148,7 @@
         }
         @media (max-width: 600px) {
             .temp { font-size: 2.2rem; }
-            #map { height: 300px; }
+            #map { height: 350px; }
         }
     </style>
 </head>
@@ -188,13 +183,6 @@
                 <p>🌡️ احساس: <span id="feelsLike">--</span>°</p>
             </div>
         </div>
-        <div class="layer-control">
-            <span>🗺️ لایهٔ نقشه:</span>
-            <select id="layerSelect">
-                <option value="rain">🌧️ رادار بارش</option>
-            </select>
-            <span style="font-size:0.75rem; opacity:0.8;">(لایه‌های دما و ابر در دسترس نیست)</span>
-        </div>
         <div id="map"></div>
     </div>
 
@@ -207,6 +195,7 @@
 <!-- Leaflet JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
+    // اگر Leaflet لود نشد، خطا نده
     if (typeof L === 'undefined') {
         document.getElementById('map').innerHTML = '<div style="background: var(--border); border-radius: 0.8rem; padding: 2rem; text-align: center;">⚠️ بارگذاری نقشه ممکن نیست. لطفاً فیلترشکن را چک کنید.</div>';
     }
@@ -220,10 +209,8 @@
     const forecastCard = document.getElementById('forecastCard');
     const historyList = document.getElementById('historyList');
     const statusMsg = document.getElementById('statusMessage');
-    const layerSelect = document.getElementById('layerSelect');
 
     let map = null, marker = null, forecastChart = null;
-    let currentWeatherLayer = null; // لایه رادار بارش
 
     // حالت تاریک
     if (localStorage.getItem('theme') === 'dark') {
@@ -241,14 +228,7 @@
         }
     });
 
-    // لایه رادار بارش از RainViewer (با رنگ اصلی و پایدارتر)
-    const rainRadarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast/{z}/{x}/{y}/0/1_0.png', {
-        attribution: '© <a href="https://www.rainviewer.com/">RainViewer</a>',
-        maxZoom: 18,
-        opacity: 0.6
-    });
-
-    // کاشی پایه‌ای (زمینه)
+    // کاشی پایه‌ای (نقشه معمولی تمیز)
     const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 18,
@@ -258,16 +238,10 @@
         if (typeof L === 'undefined') return;
 
         if (!map) {
-            map = L.map('map').setView([lat, lon], 8);
+            map = L.map('map').setView([lat, lon], 10);
             baseLayer.addTo(map);
-            currentWeatherLayer = rainRadarLayer;
-            map.addLayer(currentWeatherLayer);
         } else {
-            map.setView([lat, lon], 8);
-            // اگر لایه قبلاً اضافه نشده، اضافه کن
-            if (!map.hasLayer(rainRadarLayer)) {
-                map.addLayer(rainRadarLayer);
-            }
+            map.setView([lat, lon], 10);
         }
 
         // مارکر شهر
@@ -278,17 +252,6 @@
         }
         marker.bindPopup(`<b>${cityName}</b>`).openPopup();
     }
-
-    // تغییر لایه (تنها بارش)
-    layerSelect.addEventListener('change', () => {
-        if (!map || !currentWeatherLayer) return;
-        if (layerSelect.value === 'rain') {
-            if (!map.hasLayer(rainRadarLayer)) {
-                map.addLayer(rainRadarLayer);
-                currentWeatherLayer = rainRadarLayer;
-            }
-        }
-    });
 
     // تاریخچه
     function getHistory() {
@@ -337,6 +300,7 @@
         try {
             const isEnglish = /^[a-zA-Z\s\-]+$/.test(city);
             if (isEnglish) {
+                // مستقیم از OpenWeatherMap
                 const directRes = await fetchWithTimeout(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric&lang=fa`);
                 const directData = await directRes.json();
                 if (directData.cod !== 200) throw new Error(directData.message || 'شهر پیدا نشد');
@@ -353,6 +317,7 @@
                 weatherCard.style.display = 'block';
                 initMap(lat, lon, cityName);
 
+                // پیش‌بینی
                 const forecastRes = await fetchWithTimeout(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=fa&appid=${API_KEY}`);
                 const forecastData = await forecastRes.json();
                 if (forecastData.cod === '200') {
