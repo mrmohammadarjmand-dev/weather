@@ -200,14 +200,12 @@
             <span>🗺️ لایهٔ نقشه:</span>
             <select id="layerSelect">
                 <option value="temp">🌡️ دما</option>
-                <option value="clouds">☁️ ابر</option>
                 <option value="precipitation">🌧️ بارش</option>
+                <option value="clouds">☁️ ابر (غیرفعال)</option>
             </select>
         </div>
         <div id="map"></div>
-        <div id="tileErrorMsg" class="tile-warning">
-            ⚠️ لایهٔ آب‌وهوا بارگذاری نشد. احتمالاً نیاز به فیلترشکن دارید یا فیلترشکن فعلی مشکل دارد.
-        </div>
+        <div id="tileErrorMsg" class="tile-warning"></div>
     </div>
 
     <div class="card" id="forecastCard" style="display: none;">
@@ -252,12 +250,13 @@
         }
     });
 
+    // نقشه پایه
     const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 18,
     });
 
-    // لایه‌های آب‌وهوا (رفع ارور زوم با maxNativeZoom)
+    // لایه‌ها: دما از OWM، بارش از RainViewer، ابر = خالی (پیغام)
     const weatherLayers = {
         temp: L.tileLayer('https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
             attribution: '© OpenWeatherMap',
@@ -265,44 +264,35 @@
             maxNativeZoom: 10,
             opacity: 0.6
         }),
-        clouds: L.tileLayer('https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
-            attribution: '© OpenWeatherMap',
+        precipitation: L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast/{z}/{x}/{y}/0/1_0.png', {
+            attribution: '© <a href="https://www.rainviewer.com/">RainViewer</a>',
             maxZoom: 18,
-            maxNativeZoom: 10,
             opacity: 0.6
         }),
-        precipitation: L.tileLayer('https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
-            attribution: '© OpenWeatherMap',
-            maxZoom: 18,
-            maxNativeZoom: 10,
-            opacity: 0.6
-        })
+        clouds: null // لایه ابر موقتاً در دسترس نیست
     };
 
-    // نمایش پیام خطا اگر تایل‌های آب‌وهوا لود نشوند
-    for (let key in weatherLayers) {
-        weatherLayers[key].on('tileerror', function() {
-            tileErrorMsg.style.display = 'block';
-        });
-    }
+    // نمایش خطای تایل فقط برای لایه دما (چون بارش از RainViewer جداست)
+    weatherLayers.temp.on('tileerror', function() {
+        tileErrorMsg.style.display = 'block';
+        tileErrorMsg.textContent = '⚠️ لایه دما بارگذاری نشد. ممکن است نیاز به فیلترشکن داشته باشید.';
+    });
 
     currentWeatherLayer = weatherLayers.temp;
 
     function initMap(lat, lon, cityName) {
         if (typeof L === 'undefined') return;
-        tileErrorMsg.style.display = 'none'; // مخفی کردن پیام قبلی
+        tileErrorMsg.style.display = 'none';
 
         if (!map) {
             map = L.map('map').setView([lat, lon], 8);
             baseLayer.addTo(map);
-            currentWeatherLayer.addTo(map);
+            if (currentWeatherLayer) currentWeatherLayer.addTo(map);
         } else {
             map.setView([lat, lon], 8);
-            if (!map.hasLayer(currentWeatherLayer)) {
-                currentWeatherLayer.addTo(map);
-            }
         }
 
+        // مارکر
         if (marker) {
             marker.setLatLng([lat, lon]);
         } else {
@@ -314,14 +304,28 @@
     layerSelect.addEventListener('change', () => {
         if (!map) return;
         tileErrorMsg.style.display = 'none';
+
+        // حذف لایه قبلی
         if (currentWeatherLayer && map.hasLayer(currentWeatherLayer)) {
             map.removeLayer(currentWeatherLayer);
         }
-        const selectedLayer = layerSelect.value;
-        currentWeatherLayer = weatherLayers[selectedLayer];
-        map.addLayer(currentWeatherLayer);
+
+        const selected = layerSelect.value;
+        if (selected === 'clouds') {
+            // ابر غیرفعال است
+            tileErrorMsg.style.display = 'block';
+            tileErrorMsg.textContent = '⚠️ لایه ابر در حال حاضر در دسترس نیست.';
+            currentWeatherLayer = null;
+            return;
+        }
+
+        currentWeatherLayer = weatherLayers[selected];
+        if (currentWeatherLayer) {
+            map.addLayer(currentWeatherLayer);
+        }
     });
 
+    // تاریخچه
     function getHistory() {
         return JSON.parse(localStorage.getItem('weatherHistory') || '[]');
     }
@@ -400,7 +404,7 @@
                 return;
             }
 
-            // فارسی → Nominatim
+            // فارسی
             const nominatimURL = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
             const geoRes = await fetchWithTimeout(nominatimURL);
             const geoData = await geoRes.json();
