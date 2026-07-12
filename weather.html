@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>پیش‌بینی آب و هوا با نقشه</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" />
+    <style>
+        :root {
+            --bg: #f0f4f8;
+            --card: white;
+            --text: #1a202c;
+            --secondary: #4a5568;
+            --primary: #3b82f6;
+            --border: #e2e8f0;
+        }
+        .dark {
+            --bg: #1a202c;
+            --card: #2d3748;
+            --text: #e2e8f0;
+            --secondary: #a0aec0;
+            --primary: #63b3ed;
+            --border: #4a5568;
+        }
+        body {
+            margin: 0;
+            font-family: 'Vazirmatn', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            transition: 0.3s;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            flex: 1;
+            min-width: 250px;
+        }
+        input, button {
+            padding: 0.7rem 1rem;
+            border-radius: 0.7rem;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 1rem;
+            transition: 0.2s;
+        }
+        input {
+            flex: 1;
+            min-width: 150px;
+        }
+        button {
+            cursor: pointer;
+            background: var(--primary);
+            color: white;
+            border: none;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        button:hover { opacity: 0.9; }
+        .theme-toggle {
+            background: var(--card);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: 0.7rem;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 1px solid var(--border);
+        }
+        .weather-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .temp {
+            font-size: 3rem;
+            font-weight: bold;
+        }
+        .details p {
+            margin: 0.3rem 0;
+            color: var(--secondary);
+        }
+        #map {
+            height: 300px;
+            border-radius: 0.8rem;
+            margin-top: 1rem;
+            z-index: 0;
+        }
+        .history {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .history span {
+            background: var(--border);
+            padding: 0.3rem 0.8rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: 0.2s;
+        }
+        .history span:hover { background: var(--primary); color: white; }
+        canvas { width: 100% !important; max-height: 250px; }
+        .loading-text {
+            text-align: center;
+            padding: 1rem;
+            color: var(--secondary);
+            font-style: italic;
+        }
+        @media (max-width: 600px) {
+            .temp { font-size: 2.2rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="search-box">
+            <input type="text" id="cityInput" placeholder="نام شهر (فارسی یا انگلیسی)">
+            <button id="searchBtn">🔍 جستجو</button>
+        </div>
+        <button id="themeToggle" class="theme-toggle">🌙 حالت تاریک</button>
+    </header>
+
+    <div id="statusMessage" class="loading-text"></div>
+
+    <div id="weatherCard" class="card" style="display: none;">
+        <div class="weather-main">
+            <div>
+                <div class="temp" id="temperature">--°</div>
+                <div id="cityName" style="font-size: 1.2rem;"></div>
+                <div id="weatherDesc" style="color: var(--secondary);"></div>
+            </div>
+            <div class="details">
+                <p>💧 رطوبت: <span id="humidity">--</span>%</p>
+                <p>🌬️ باد: <span id="wind">--</span> km/h</p>
+                <p>🌡️ احساس: <span id="feelsLike">--</span>°</p>
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <div class="card" id="forecastCard" style="display: none;">
+        <h3 style="margin-top: 0;">📈 نمودار دمای ۲۴ ساعت آینده</h3>
+        <canvas id="forecastChart"></canvas>
+    </div>
+
+    <div class="card" id="historyCard">
+        <h3 style="margin-top: 0;">🕒 جستجوهای اخیر</h3>
+        <div class="history" id="historyList">
+            <span style="color: var(--secondary);">تاریخچه‌ای وجود ندارد</span>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const API_KEY = '88dce30fd75d9ab6be2f1c55269818f2';
+    const USER_EMAIL = 'mr.mohammad.arjmand.dev@gmail.com';
+
+    const cityInput = document.getElementById('cityInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const themeToggle = document.getElementById('themeToggle');
+    const weatherCard = document.getElementById('weatherCard');
+    const forecastCard = document.getElementById('forecastCard');
+    const historyList = document.getElementById('historyList');
+    const statusMsg = document.getElementById('statusMessage');
+
+    let map, marker, forecastChart;
+
+    // حالت تاریک
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add('dark');
+        themeToggle.textContent = '☀️ حالت روشن';
+    }
+    themeToggle.addEventListener('click', () => {
+        document.body.classList.toggle('dark');
+        if (document.body.classList.contains('dark')) {
+            localStorage.setItem('theme', 'dark');
+            themeToggle.textContent = '☀️ حالت روشن';
+        } else {
+            localStorage.removeItem('theme');
+            themeToggle.textContent = '🌙 حالت تاریک';
+        }
+    });
+
+    function initMap(lat, lon, cityName) {
+        if (map) {
+            map.setView([lat, lon], 10);
+        } else {
+            map = L.map('map').setView([lat, lon], 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18,
+            }).addTo(map);
+        }
+        if (marker) {
+            marker.setLatLng([lat, lon]);
+        } else {
+            marker = L.marker([lat, lon]).addTo(map);
+        }
+        marker.bindPopup(`<b>${cityName}</b>`).openPopup();
+    }
+
+    function getHistory() {
+        return JSON.parse(localStorage.getItem('weatherHistory') || '[]');
+    }
+    function saveToHistory(city) {
+        let history = getHistory();
+        history = history.filter(item => item.toLowerCase() !== city.toLowerCase());
+        history.unshift(city);
+        if (history.length > 5) history.pop();
+        localStorage.setItem('weatherHistory', JSON.stringify(history));
+        renderHistory();
+    }
+    function renderHistory() {
+        const history = getHistory();
+        historyList.innerHTML = '';
+        if (history.length === 0) {
+            historyList.innerHTML = '<span style="color: var(--secondary);">تاریخچه‌ای وجود ندارد</span>';
+            return;
+        }
+        history.forEach(city => {
+            const span = document.createElement('span');
+            span.textContent = city;
+            span.addEventListener('click', () => {
+                cityInput.value = city;
+                fetchWeather(city);
+            });
+            historyList.appendChild(span);
+        });
+    }
+
+    async function fetchWeather(city) {
+        statusMsg.textContent = '⏳ در حال دریافت اطلاعات...';
+        weatherCard.style.display = 'none';
+        forecastCard.style.display = 'none';
+
+        try {
+            // دریافت مختصات
+            const nominatimURL = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
+            const geoRes = await fetch(nominatimURL, {
+                headers: { 'User-Agent': `WeatherApp/1.0 (${USER_EMAIL})` }
+            });
+            const geoData = await geoRes.json();
+            if (!geoData.length) throw new Error('شهر پیدا نشد. لطفاً نام را بررسی کنید.');
+
+            const lat = parseFloat(geoData[0].lat);
+            const lon = parseFloat(geoData[0].lon);
+            const cityName = geoData[0].display_name.split(',')[0] || city;
+            document.getElementById('cityName').textContent = cityName;
+
+            // آب‌وهوای فعلی
+            const weatherRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&lang=fa&appid=${API_KEY}`);
+            const weatherData = await weatherRes.json();
+            if (weatherData.cod !== 200) throw new Error(weatherData.message || 'خطا در دریافت آب‌وهوا');
+            if (!weatherData.main) throw new Error('داده‌های دما در دسترس نیست');
+
+            document.getElementById('temperature').textContent = Math.round(weatherData.main.temp) + '°C';
+            document.getElementById('weatherDesc').textContent = weatherData.weather[0].description;
+            document.getElementById('humidity').textContent = weatherData.main.humidity;
+            document.getElementById('wind').textContent = Math.round(weatherData.wind.speed * 3.6);
+            document.getElementById('feelsLike').textContent = Math.round(weatherData.main.feels_like) + '°C';
+
+            weatherCard.style.display = 'block';
+            initMap(lat, lon, cityName);
+
+            // پیش‌بینی
+            const forecastRes = await fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=fa&appid=${API_KEY}`);
+            const forecastData = await forecastRes.json();
+            if (forecastData.cod !== '200') throw new Error(forecastData.message || 'خطا در پیش‌بینی');
+
+            const next24h = forecastData.list.slice(0, 8);
+            const labels = next24h.map(item => {
+                const d = new Date(item.dt * 1000);
+                return d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+            });
+            const temps = next24h.map(item => Math.round(item.main.temp));
+
+            forecastCard.style.display = 'block';
+            renderChart(labels, temps);
+
+            saveToHistory(city);
+            statusMsg.textContent = '';
+
+        } catch (err) {
+            statusMsg.textContent = '⚠️ خطا: ' + err.message;
+            console.error(err);
+        }
+    }
+
+    function renderChart(labels, temps) {
+        const ctx = document.getElementById('forecastChart').getContext('2d');
+        if (forecastChart) forecastChart.destroy();
+        forecastChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'دمای هوا (°C)',
+                    data: temps,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.1)',
+                    tension: 0.4,
+                    pointBackgroundColor: '#3b82f6',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { y: { grid: { color: '#cbd5e0' } } }
+            }
+        });
+    }
+
+    searchBtn.addEventListener('click', () => {
+        const city = cityInput.value.trim();
+        if (!city) return;
+        fetchWeather(city);
+    });
+
+    cityInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchBtn.click();
+    });
+
+    renderHistory();
+</script>
+</body>
+</html>
