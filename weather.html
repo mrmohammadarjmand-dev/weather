@@ -142,6 +142,16 @@
             align-items: center;
             font-size: 0.85rem;
         }
+        .tile-warning {
+            display: none;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+        }
         canvas { width: 100% !important; max-height: 250px; }
         .loading-text {
             text-align: center;
@@ -193,9 +203,11 @@
                 <option value="clouds">☁️ ابر</option>
                 <option value="precipitation">🌧️ بارش</option>
             </select>
-            <span style="font-size:0.75rem; opacity:0.8;">(ممکن است نیاز به فیلترشکن داشته باشد)</span>
         </div>
         <div id="map"></div>
+        <div id="tileErrorMsg" class="tile-warning">
+            ⚠️ لایهٔ آب‌وهوا بارگذاری نشد. احتمالاً نیاز به فیلترشکن دارید یا فیلترشکن فعلی مشکل دارد.
+        </div>
     </div>
 
     <div class="card" id="forecastCard" style="display: none;">
@@ -220,11 +232,11 @@
     const historyList = document.getElementById('historyList');
     const statusMsg = document.getElementById('statusMessage');
     const layerSelect = document.getElementById('layerSelect');
+    const tileErrorMsg = document.getElementById('tileErrorMsg');
 
     let map = null, marker = null, forecastChart = null;
-    let currentWeatherLayer = null; // لایهٔ آب‌وهوای فعال
+    let currentWeatherLayer = null;
 
-    // حالت تاریک
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark');
         themeToggle.textContent = '☀️ حالت روشن';
@@ -240,18 +252,17 @@
         }
     });
 
-    // کاشی پایه‌ای (نقشهٔ معمولی)
     const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 18,
     });
 
-    // لایه‌های آب‌وهوا از OpenWeatherMap (حداکثر زوم واقعی 10، بعد از آن بزرگنمایی می‌شود)
+    // لایه‌های آب‌وهوا (رفع ارور زوم با maxNativeZoom)
     const weatherLayers = {
         temp: L.tileLayer('https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
             attribution: '© OpenWeatherMap',
             maxZoom: 18,
-            maxNativeZoom: 10,   // ← این خط مشکل «zoom level not supported» را حل کرد
+            maxNativeZoom: 10,
             opacity: 0.6
         }),
         clouds: L.tileLayer('https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
@@ -268,11 +279,18 @@
         })
     };
 
-    // لایهٔ پیش‌فرض: دما
+    // نمایش پیام خطا اگر تایل‌های آب‌وهوا لود نشوند
+    for (let key in weatherLayers) {
+        weatherLayers[key].on('tileerror', function() {
+            tileErrorMsg.style.display = 'block';
+        });
+    }
+
     currentWeatherLayer = weatherLayers.temp;
 
     function initMap(lat, lon, cityName) {
         if (typeof L === 'undefined') return;
+        tileErrorMsg.style.display = 'none'; // مخفی کردن پیام قبلی
 
         if (!map) {
             map = L.map('map').setView([lat, lon], 8);
@@ -280,13 +298,11 @@
             currentWeatherLayer.addTo(map);
         } else {
             map.setView([lat, lon], 8);
-            // اطمینان از وجود لایهٔ آب‌وهوا
             if (!map.hasLayer(currentWeatherLayer)) {
                 currentWeatherLayer.addTo(map);
             }
         }
 
-        // مارکر شهر
         if (marker) {
             marker.setLatLng([lat, lon]);
         } else {
@@ -295,21 +311,17 @@
         marker.bindPopup(`<b>${cityName}</b>`).openPopup();
     }
 
-    // تعویض لایهٔ آب‌وهوا با انتخاب کاربر
     layerSelect.addEventListener('change', () => {
         if (!map) return;
-
-        // حذف لایهٔ قبلی
+        tileErrorMsg.style.display = 'none';
         if (currentWeatherLayer && map.hasLayer(currentWeatherLayer)) {
             map.removeLayer(currentWeatherLayer);
         }
-
         const selectedLayer = layerSelect.value;
         currentWeatherLayer = weatherLayers[selectedLayer];
         map.addLayer(currentWeatherLayer);
     });
 
-    // تاریخچه (همان کد قبلی، تمیز و کوچک)
     function getHistory() {
         return JSON.parse(localStorage.getItem('weatherHistory') || '[]');
     }
@@ -429,7 +441,7 @@
 
         } catch (err) {
             if (err.name === 'AbortError') {
-                statusMsg.textContent = '⚠️ خطا: درخواست زمان‌بر شد. اینترنت خود را بررسی کنید.';
+                statusMsg.textContent = '⚠️ درخواست زمان‌بر شد. لطفاً فیلترشکن خود را روشن یا تغییر دهید.';
             } else {
                 statusMsg.textContent = '⚠️ خطا: ' + err.message;
             }
