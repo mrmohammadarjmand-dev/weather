@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>پیش‌بینی آب و هوا با نقشه</title>
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" />
+    <!-- فونت وزیر از Google Fonts (پایدار و بدون مشکل فارسی) -->
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg: #f0f4f8;
@@ -24,9 +27,11 @@
             --primary: #63b3ed;
             --border: #4a5568;
         }
+        * {
+            font-family: 'Vazirmatn', sans-serif;
+        }
         body {
             margin: 0;
-            font-family: 'Vazirmatn', sans-serif;
             background: var(--bg);
             color: var(--text);
             transition: 0.3s;
@@ -83,25 +88,24 @@
             align-items: center;
             gap: 0.5rem;
             margin-bottom: 0.8rem;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             color: var(--secondary);
             flex-wrap: nowrap;
             overflow-x: auto;
             white-space: nowrap;
             padding-bottom: 0.3rem;
+            min-height: 1.8rem;
         }
         .history-bar span {
             background: var(--border);
-            padding: 0.2rem 0.6rem;
+            padding: 0.15rem 0.5rem;
             border-radius: 0.4rem;
             cursor: pointer;
             flex-shrink: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-inline-end: 0.3rem;
         }
-        .history-bar span:hover { background: var(--primary); color: white; }
+        .history-bar span:not(:last-child) {
+            margin-inline-end: 0.4rem;
+        }
         .card {
             background: var(--card);
             border-radius: 1rem;
@@ -127,7 +131,7 @@
             font-size: 0.95rem;
         }
         #map {
-            height: 300px;
+            height: 400px; /* نقشه بزرگ‌تر شد */
             border-radius: 0.8rem;
             margin-top: 1rem;
             z-index: 0;
@@ -137,7 +141,7 @@
             display: flex;
             gap: 0.5rem;
             align-items: center;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
         }
         canvas { width: 100% !important; max-height: 250px; }
         .loading-text {
@@ -149,6 +153,7 @@
         }
         @media (max-width: 600px) {
             .temp { font-size: 2.2rem; }
+            #map { height: 300px; }
         }
     </style>
 </head>
@@ -162,9 +167,9 @@
         <button id="themeToggle" class="theme-toggle">🌙 حالت تاریک</button>
     </header>
 
-    <!-- تاریخچه‌ی کوچک بالا -->
+    <!-- تاریخچه کوچک بالا -->
     <div class="history-bar" id="historyBar">
-        <span style="color: var(--secondary);">🕒 اخیر:</span>
+        <span style="color: var(--secondary); font-weight: bold;">🕒 اخیر:</span>
         <span id="historyList" style="color: var(--secondary);">-</span>
     </div>
 
@@ -184,10 +189,11 @@
             </div>
         </div>
         <div class="layer-control">
-            <span>🗺️ نقشه:</span>
+            <span>🗺️ لایهٔ نقشه:</span>
             <select id="layerSelect">
                 <option value="rain">🌧️ رادار بارش</option>
             </select>
+            <span style="font-size:0.75rem; opacity:0.8;">(لایه‌های دما و ابر در دسترس نیست)</span>
         </div>
         <div id="map"></div>
     </div>
@@ -198,6 +204,7 @@
     </div>
 </div>
 
+<!-- Leaflet JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
     if (typeof L === 'undefined') {
@@ -216,7 +223,7 @@
     const layerSelect = document.getElementById('layerSelect');
 
     let map = null, marker = null, forecastChart = null;
-    let currentWeatherLayer = null; // لایه رادار
+    let currentWeatherLayer = null; // لایه رادار بارش
 
     // حالت تاریک
     if (localStorage.getItem('theme') === 'dark') {
@@ -234,13 +241,14 @@
         }
     });
 
-    // لایه رادار بارش از RainViewer (رایگان و پایدار)
-    const rainRadarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast/{z}/{x}/{y}/2/1_0.png', {
+    // لایه رادار بارش از RainViewer (با رنگ اصلی و پایدارتر)
+    const rainRadarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast/{z}/{x}/{y}/0/1_0.png', {
         attribution: '© <a href="https://www.rainviewer.com/">RainViewer</a>',
         maxZoom: 18,
-        opacity: 0.7
+        opacity: 0.6
     });
 
+    // کاشی پایه‌ای (زمینه)
     const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 18,
@@ -252,11 +260,14 @@
         if (!map) {
             map = L.map('map').setView([lat, lon], 8);
             baseLayer.addTo(map);
-            // لایه پیش‌فرض رادار
             currentWeatherLayer = rainRadarLayer;
             map.addLayer(currentWeatherLayer);
         } else {
             map.setView([lat, lon], 8);
+            // اگر لایه قبلاً اضافه نشده، اضافه کن
+            if (!map.hasLayer(rainRadarLayer)) {
+                map.addLayer(rainRadarLayer);
+            }
         }
 
         // مارکر شهر
@@ -268,10 +279,9 @@
         marker.bindPopup(`<b>${cityName}</b>`).openPopup();
     }
 
-    // تغییر لایه (فقط رادار)
+    // تغییر لایه (تنها بارش)
     layerSelect.addEventListener('change', () => {
         if (!map || !currentWeatherLayer) return;
-        // در حال حاضر فقط یک گزینه داریم، ولی برای انعطاف‌پذیری نگهش می‌داریم
         if (layerSelect.value === 'rain') {
             if (!map.hasLayer(rainRadarLayer)) {
                 map.addLayer(rainRadarLayer);
@@ -288,7 +298,7 @@
         let history = getHistory();
         history = history.filter(item => item.toLowerCase() !== city.toLowerCase());
         history.unshift(city);
-        if (history.length > 4) history.pop(); // حداکثر ۴ شهر
+        if (history.length > 4) history.pop();
         localStorage.setItem('weatherHistory', JSON.stringify(history));
         renderHistory();
     }
