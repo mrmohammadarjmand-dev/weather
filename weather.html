@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>پیش‌بینی آب و هوا با نقشه</title>
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <!-- فونت وزیر از Google Fonts (پایدار) -->
     <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -133,7 +130,7 @@
             font-size: 0.95rem;
         }
         #map {
-            height: 500px; /* نقشه بزرگ‌تر */
+            height: 500px;
             border-radius: 0.8rem;
             margin-top: 1rem;
             z-index: 0;
@@ -162,7 +159,6 @@
         <button id="themeToggle" class="theme-toggle">🌙 حالت تاریک</button>
     </header>
 
-    <!-- تاریخچه کوچک بالا -->
     <div class="history-bar" id="historyBar">
         <span style="color: var(--secondary); font-weight: bold;">🕒 اخیر:</span>
         <span id="historyList" style="color: var(--secondary);">-</span>
@@ -192,10 +188,8 @@
     </div>
 </div>
 
-<!-- Leaflet JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-    // اگر Leaflet لود نشد، خطا نده
     if (typeof L === 'undefined') {
         document.getElementById('map').innerHTML = '<div style="background: var(--border); border-radius: 0.8rem; padding: 2rem; text-align: center;">⚠️ بارگذاری نقشه ممکن نیست. لطفاً فیلترشکن را چک کنید.</div>';
     }
@@ -212,7 +206,6 @@
 
     let map = null, marker = null, forecastChart = null;
 
-    // حالت تاریک
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark');
         themeToggle.textContent = '☀️ حالت روشن';
@@ -228,7 +221,6 @@
         }
     });
 
-    // کاشی پایه‌ای (نقشه معمولی تمیز)
     const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 18,
@@ -236,15 +228,12 @@
 
     function initMap(lat, lon, cityName) {
         if (typeof L === 'undefined') return;
-
         if (!map) {
             map = L.map('map').setView([lat, lon], 10);
             baseLayer.addTo(map);
         } else {
             map.setView([lat, lon], 10);
         }
-
-        // مارکر شهر
         if (marker) {
             marker.setLatLng([lat, lon]);
         } else {
@@ -253,7 +242,6 @@
         marker.bindPopup(`<b>${cityName}</b>`).openPopup();
     }
 
-    // تاریخچه
     function getHistory() {
         return JSON.parse(localStorage.getItem('weatherHistory') || '[]');
     }
@@ -283,7 +271,6 @@
         });
     }
 
-    // fetch با timeout
     async function fetchWithTimeout(url, timeout = 10000) {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
@@ -300,7 +287,6 @@
         try {
             const isEnglish = /^[a-zA-Z\s\-]+$/.test(city);
             if (isEnglish) {
-                // مستقیم از OpenWeatherMap
                 const directRes = await fetchWithTimeout(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric&lang=fa`);
                 const directData = await directRes.json();
                 if (directData.cod !== 200) throw new Error(directData.message || 'شهر پیدا نشد');
@@ -317,7 +303,6 @@
                 weatherCard.style.display = 'block';
                 initMap(lat, lon, cityName);
 
-                // پیش‌بینی
                 const forecastRes = await fetchWithTimeout(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=fa&appid=${API_KEY}`);
                 const forecastData = await forecastRes.json();
                 if (forecastData.cod === '200') {
@@ -335,7 +320,6 @@
                 return;
             }
 
-            // فارسی → Nominatim
             const nominatimURL = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
             const geoRes = await fetchWithTimeout(nominatimURL);
             const geoData = await geoRes.json();
