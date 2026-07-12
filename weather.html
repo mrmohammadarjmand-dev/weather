@@ -51,7 +51,7 @@
             flex: 1;
             min-width: 220px;
         }
-        input, button {
+        input, button, select {
             padding: 0.4rem 0.7rem;
             border-radius: 0.5rem;
             border: 1px solid var(--border);
@@ -65,7 +65,7 @@
             flex: 1;
             min-width: 120px;
         }
-        button {
+        button, select {
             cursor: pointer;
             background: var(--primary);
             color: white;
@@ -135,6 +135,13 @@
             margin-top: 1rem;
             z-index: 0;
         }
+        .layer-control {
+            margin: 0.5rem 0 0 0;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.85rem;
+        }
         canvas { width: 100% !important; max-height: 250px; }
         .loading-text {
             text-align: center;
@@ -179,6 +186,15 @@
                 <p>🌡️ احساس: <span id="feelsLike">--</span>°</p>
             </div>
         </div>
+        <div class="layer-control">
+            <span>🗺️ لایهٔ نقشه:</span>
+            <select id="layerSelect">
+                <option value="temp">🌡️ دما</option>
+                <option value="clouds">☁️ ابر</option>
+                <option value="precipitation">🌧️ بارش</option>
+            </select>
+            <span style="font-size:0.75rem; opacity:0.8;">(ممکن است نیاز به فیلترشکن داشته باشد)</span>
+        </div>
         <div id="map"></div>
     </div>
 
@@ -203,9 +219,12 @@
     const forecastCard = document.getElementById('forecastCard');
     const historyList = document.getElementById('historyList');
     const statusMsg = document.getElementById('statusMessage');
+    const layerSelect = document.getElementById('layerSelect');
 
     let map = null, marker = null, forecastChart = null;
+    let currentWeatherLayer = null; // لایهٔ آب‌وهوای فعال
 
+    // حالت تاریک
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark');
         themeToggle.textContent = '☀️ حالت روشن';
@@ -221,19 +240,53 @@
         }
     });
 
+    // کاشی پایه‌ای (نقشهٔ معمولی)
     const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 18,
     });
 
+    // لایه‌های آب‌وهوا از OpenWeatherMap (حداکثر زوم واقعی 10، بعد از آن بزرگنمایی می‌شود)
+    const weatherLayers = {
+        temp: L.tileLayer('https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
+            attribution: '© OpenWeatherMap',
+            maxZoom: 18,
+            maxNativeZoom: 10,   // ← این خط مشکل «zoom level not supported» را حل کرد
+            opacity: 0.6
+        }),
+        clouds: L.tileLayer('https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
+            attribution: '© OpenWeatherMap',
+            maxZoom: 18,
+            maxNativeZoom: 10,
+            opacity: 0.6
+        }),
+        precipitation: L.tileLayer('https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=' + API_KEY, {
+            attribution: '© OpenWeatherMap',
+            maxZoom: 18,
+            maxNativeZoom: 10,
+            opacity: 0.6
+        })
+    };
+
+    // لایهٔ پیش‌فرض: دما
+    currentWeatherLayer = weatherLayers.temp;
+
     function initMap(lat, lon, cityName) {
         if (typeof L === 'undefined') return;
+
         if (!map) {
-            map = L.map('map').setView([lat, lon], 10);
+            map = L.map('map').setView([lat, lon], 8);
             baseLayer.addTo(map);
+            currentWeatherLayer.addTo(map);
         } else {
-            map.setView([lat, lon], 10);
+            map.setView([lat, lon], 8);
+            // اطمینان از وجود لایهٔ آب‌وهوا
+            if (!map.hasLayer(currentWeatherLayer)) {
+                currentWeatherLayer.addTo(map);
+            }
         }
+
+        // مارکر شهر
         if (marker) {
             marker.setLatLng([lat, lon]);
         } else {
@@ -242,6 +295,21 @@
         marker.bindPopup(`<b>${cityName}</b>`).openPopup();
     }
 
+    // تعویض لایهٔ آب‌وهوا با انتخاب کاربر
+    layerSelect.addEventListener('change', () => {
+        if (!map) return;
+
+        // حذف لایهٔ قبلی
+        if (currentWeatherLayer && map.hasLayer(currentWeatherLayer)) {
+            map.removeLayer(currentWeatherLayer);
+        }
+
+        const selectedLayer = layerSelect.value;
+        currentWeatherLayer = weatherLayers[selectedLayer];
+        map.addLayer(currentWeatherLayer);
+    });
+
+    // تاریخچه (همان کد قبلی، تمیز و کوچک)
     function getHistory() {
         return JSON.parse(localStorage.getItem('weatherHistory') || '[]');
     }
@@ -320,6 +388,7 @@
                 return;
             }
 
+            // فارسی → Nominatim
             const nominatimURL = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
             const geoRes = await fetchWithTimeout(nominatimURL);
             const geoData = await geoRes.json();
